@@ -1,14 +1,16 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from time import perf_counter
 
-from app.core.prompts import build_system_prompt, format_memories
-from app.db.repositories import ConversationRepo, MemoryRepo
+from app.core.prompts import build_system_prompt, format_memories, format_workflow
+from app.db.repositories import BookingRepo, ConversationRepo, MemoryRepo
 from app.services import llm
 from app.tools import registry
+from app.workflow.fsm import BookingFSM
 
 FALLBACK_REPLY = "Sorry, I didn't catch that - could you say it again?"
-MAX_TOOL_ROUNDS = 3
+MAX_TOOL_ROUNDS = 4
 
 
 @dataclass
@@ -17,27 +19,38 @@ class TurnResult:
     llm_ms: int
     tool_ms: int
     memories_updated: bool
+    workflow: dict = field(default_factory=dict)
 
 
 def run_text_turn(
     repo: ConversationRepo,
     memory_repo: MemoryRepo,
+    booking_repo: BookingRepo,
     user_id: str,
     session_id: str,
     user_text: str,
 ) -> TurnResult:
-    """One conversation turn: persist input, build context (memories + history),
-    run the LLM with tools until it produces a final reply, persist it."""
+    """One conversation turn: persist input, build context (memories + history +
+    workflow state), run the LLM with tools until a final reply, persist it."""
     repo.touch_user(user_id)
     repo.get_or_create_session(session_id, user_id)
+    first_message_of_session = repo.recent_messages(session_id, limit=1) == []
     repo.add_message(session_id, "user", user_text)
 
+    fsm = BookingFSM(booking_repo, user_id)
     memories = memory_repo.list_for_user(user_id)
-    system = build_system_prompt(memories_block=format_memories(memories))
+    today = date.today()
+    system = build_system_prompt(
+        memories_block=format_memories(memories),
+        workflow_block=format_workflow(fsm.public_state(), resuming=first_message_of_session),
+        today_line=f"Today is {today.strftime('%A')}, {today.isoformat()}.",
+    )
     history = [{"role": m.role, "content": m.content} for m in repo.recent_messages(session_id)]
     messages: list[dict] = [{"role": "system", "content": system}, *history]
 
-    ctx = registry.ToolContext(memory_repo=memory_repo, user_id=user_id)
+    ctx = registry.ToolContext(
+        memory_repo=memory_repo, user_id=user_id, fsm=fsm, user_text=user_text
+    )
     llm_ms = 0
     tool_ms = 0
 
@@ -72,4 +85,5 @@ def run_text_turn(
         llm_ms=llm_ms,
         tool_ms=tool_ms,
         memories_updated=ctx.memories_updated,
+        workflow=fsm.public_state(),
     )

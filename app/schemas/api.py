@@ -6,6 +6,7 @@ class WorkflowInfo(BaseModel):
     slots: dict = Field(default_factory=dict)
     missing: list[str] = Field(default_factory=list)
     options: list[dict] | None = None
+    selected: str | None = None
 
 
 class Timings(BaseModel):

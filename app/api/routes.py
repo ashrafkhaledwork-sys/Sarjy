@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.core.orchestrator import run_text_turn
 from app.db.engine import get_db
-from app.db.repositories import ConversationRepo, MemoryRepo
-from app.schemas.api import ConverseResponse, Timings
+from app.db.repositories import BookingRepo, ConversationRepo, MemoryRepo
+from app.schemas.api import ConverseResponse, Timings, WorkflowInfo
 from app.services import stt, tts
 
 router = APIRouter(prefix="/api")
@@ -50,7 +50,7 @@ def converse(
         raise AppError("invalid_input", "message too long (max 2000 characters)")
 
     result = run_text_turn(
-        ConversationRepo(db), MemoryRepo(db), user_id, session_id, transcript
+        ConversationRepo(db), MemoryRepo(db), BookingRepo(db), user_id, session_id, transcript
     )
 
     audio_bytes, tts_ms = tts.synthesize(result.reply_text)
@@ -60,6 +60,7 @@ def converse(
         transcript=transcript,
         reply_text=result.reply_text,
         audio_b64=audio_b64,
+        workflow=WorkflowInfo(**result.workflow),
         memories_updated=result.memories_updated,
         timings=Timings(
             stt_ms=stt_ms,
@@ -70,6 +71,26 @@ def converse(
         ),
         request_id=getattr(request.state, "request_id", "unknown"),
     )
+
+
+@router.get("/bookings")
+def list_bookings(
+    user_id: str = Depends(require_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    bookings = BookingRepo(db).list_for_user(user_id)
+    return {
+        "bookings": [
+            {
+                "id": b.id,
+                "status": b.status,
+                "slots": b.slots,
+                "restaurant": (b.restaurant or {}).get("name"),
+                "updated_at": b.updated_at.isoformat(),
+            }
+            for b in bookings
+        ]
+    }
 
 
 @router.get("/memories")

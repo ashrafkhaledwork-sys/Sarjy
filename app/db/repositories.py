@@ -1,9 +1,42 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import ChatSession, Memory, Message, User, utcnow
+from app.db.models import Booking, ChatSession, Memory, Message, User, utcnow
 
 HISTORY_WINDOW = 12
+
+ACTIVE_BOOKING_STATES = ("COLLECTING", "PRESENTING", "CONFIRMING")
+
+
+class BookingRepo:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def active_for_user(self, user_id: str) -> Booking | None:
+        stmt = (
+            select(Booking)
+            .where(Booking.user_id == user_id, Booking.status.in_(ACTIVE_BOOKING_STATES))
+            .order_by(Booking.updated_at.desc())
+        )
+        return self.db.scalars(stmt).first()
+
+    def create(self, user_id: str) -> Booking:
+        booking = Booking(user_id=user_id, status="COLLECTING", slots={})
+        self.db.add(booking)
+        self.db.commit()
+        return booking
+
+    def save(self, booking: Booking) -> None:
+        booking.updated_at = utcnow()
+        self.db.commit()
+
+    def list_for_user(self, user_id: str) -> list[Booking]:
+        stmt = (
+            select(Booking)
+            .where(Booking.user_id == user_id)
+            .order_by(Booking.updated_at.desc())
+        )
+        return list(self.db.scalars(stmt).all())
 
 
 class MemoryRepo:

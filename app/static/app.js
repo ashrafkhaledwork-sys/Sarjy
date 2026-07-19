@@ -71,6 +71,7 @@ async function converse(fields) {
     if (fields.audio !== undefined) bubble("user", data.transcript);
     bubble("assistant", data.reply_text);
     if (data.memories_updated) note("💾 memory updated");
+    renderWorkflow(data.workflow);
     setStatus("speaking", "Speaking…");
     speak(data.audio_b64, data.reply_text, () =>
       setStatus("idle", "Tap the mic and talk — I remember you.")
@@ -96,6 +97,33 @@ form.addEventListener("submit", (e) => {
   bubble("user", text);
   converse({ text });
 });
+
+// --- workflow state panel: the FSM made visible ---
+const wfPanel = document.getElementById("workflow-panel");
+const wfStatus = document.getElementById("wf-status");
+const wfDetail = document.getElementById("wf-detail");
+
+function renderWorkflow(wf) {
+  if (!wf || wf.status === "IDLE") {
+    wfPanel.hidden = true;
+    return;
+  }
+  wfPanel.hidden = false;
+  wfStatus.textContent = wf.status;
+  wfStatus.className = "wf-chip" +
+    (wf.status === "COMPLETED" ? " done" : wf.status === "CANCELLED" ? " cancelled" : "");
+
+  const parts = [];
+  const slots = wf.slots || {};
+  const labels = { cuisine: "cuisine", area: "area", party_size: "party", date: "date", time: "time" };
+  for (const [k, label] of Object.entries(labels)) {
+    if (slots[k]) parts.push(`${label}: ${slots[k]}`);
+  }
+  if (wf.selected) parts.push(`→ ${wf.selected}`);
+  if (wf.missing?.length) parts.push(`missing: ${wf.missing.join(", ")}`);
+  if (wf.options?.length) parts.push(`options: ${wf.options.map(o => o.name).join(" · ")}`);
+  wfDetail.textContent = parts.join("  ·  ");
+}
 
 // --- memory drawer ---
 const drawer = document.getElementById("drawer");

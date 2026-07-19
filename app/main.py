@@ -1,3 +1,4 @@
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,9 +8,14 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router as api_router
-from app.config import APP_VERSION
+from app.config import APP_VERSION, settings
 from app.core.errors import AppError
 from app.db.engine import db_ping, init_db
+
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 

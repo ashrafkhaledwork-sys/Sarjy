@@ -38,6 +38,24 @@ class SearchRestaurantsArgs(BaseModel):
         return v.strip() or "restaurant"
 
 
+class UpdateBookingArgs(BaseModel):
+    """Loose types only - semantic validation happens per-field in the FSM so
+    one bad value doesn't discard the good ones from the same turn."""
+
+    cuisine: str | None = None
+    area: str | None = None
+    party_size: int | str | None = None
+    date: str | None = None
+    time: str | None = None
+
+    def provided(self) -> dict:
+        return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
+class SelectOptionArgs(BaseModel):
+    n: int = Field(ge=1, le=9)
+
+
 class DeleteMemoryArgs(BaseModel):
     key: str = Field(min_length=1, max_length=64)
 

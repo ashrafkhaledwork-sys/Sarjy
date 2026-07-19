@@ -63,11 +63,11 @@ if settings.foursquare_api_key:
         )
         if r.status_code == 200:
             names = [p.get("name") for p in r.json().get("results", [])]
-            fsq_ok, fsq_detail = bool(names), f"{label} → {names or 'zero results in ' + CITY}"
+            fsq_ok, fsq_detail = bool(names), f"{label} -> {names or 'zero results in ' + CITY}"
             if fsq_ok:
                 break
         else:
-            fsq_detail = f"{label} → HTTP {r.status_code}"
+            fsq_detail = f"{label} -> HTTP {r.status_code}"
     report("Foursquare", fsq_ok, fsq_detail)
 else:
     print("[SKIP] Foursquare: FOURSQUARE_API_KEY empty")

@@ -1,0 +1,118 @@
+import { speak, startRecording } from "/audio.js";
+
+// --- identity: stable user across sessions, fresh session per tab ---
+const userId = localStorage.getItem("sarjy_user_id") ||
+  (localStorage.setItem("sarjy_user_id", crypto.randomUUID()), localStorage.getItem("sarjy_user_id"));
+const sessionId = sessionStorage.getItem("sarjy_session_id") ||
+  (sessionStorage.setItem("sarjy_session_id", crypto.randomUUID()), sessionStorage.getItem("sarjy_session_id"));
+
+const chat = document.getElementById("chat");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const send = document.getElementById("send");
+const mic = document.getElementById("mic");
+const statusDot = document.getElementById("status-dot");
+const tagline = document.getElementById("tagline");
+
+let recording = null;
+let busy = false;
+
+function setStatus(state, label) {
+  statusDot.className = "dot " + state;
+  tagline.textContent = label;
+}
+
+function bubble(role, textContent) {
+  const div = document.createElement("div");
+  div.className = "bubble " + role;
+  div.textContent = textContent; // textContent, never innerHTML: LLM output is untrusted
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function note(textContent) {
+  const div = document.createElement("div");
+  div.className = "note";
+  div.textContent = textContent;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+async function converse(fields) {
+  busy = true;
+  send.disabled = true;
+  mic.disabled = fields.audio === undefined ? false : true;
+  setStatus("thinking", "Thinking…");
+  const thinking = note("Sarjy is thinking…");
+
+  try {
+    const fd = new FormData();
+    fd.append("session_id", sessionId);
+    if (fields.text !== undefined) fd.append("text", fields.text);
+    if (fields.audio !== undefined) fd.append("audio", fields.audio.blob, fields.audio.filename);
+
+    const res = await fetch("/api/converse", {
+      method: "POST",
+      headers: { "X-User-Id": userId },
+      body: fd,
+    });
+    const data = await res.json();
+    thinking.remove();
+
+    if (!res.ok) {
+      const message = data.error?.message || "Something went wrong.";
+      bubble("assistant", message);
+      setStatus("idle", "Tap the mic and talk — I remember you.");
+      return;
+    }
+
+    if (fields.audio !== undefined) bubble("user", data.transcript);
+    bubble("assistant", data.reply_text);
+    setStatus("speaking", "Speaking…");
+    speak(data.audio_b64, data.reply_text, () =>
+      setStatus("idle", "Tap the mic and talk — I remember you.")
+    );
+  } catch (err) {
+    thinking.remove();
+    bubble("assistant", "Network error - is the server reachable?");
+    setStatus("idle", "Tap the mic and talk — I remember you.");
+  } finally {
+    busy = false;
+    send.disabled = false;
+    mic.disabled = false;
+    input.focus();
+  }
+}
+
+// --- text path ---
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || busy) return;
+  input.value = "";
+  bubble("user", text);
+  converse({ text });
+});
+
+// --- voice path: tap to record, tap again to send ---
+mic.addEventListener("click", async () => {
+  if (busy) return;
+  if (recording) {
+    const rec = recording;
+    recording = null;
+    mic.classList.remove("recording");
+    const { blob, filename } = await rec.stop();
+    converse({ audio: { blob, filename } });
+    return;
+  }
+  try {
+    recording = await startRecording();
+    mic.classList.add("recording");
+    setStatus("listening", "Listening — tap again to send.");
+  } catch (err) {
+    note("Microphone unavailable (" + err.name + "). You can type instead.");
+    setStatus("idle", "Mic blocked — typing works fine.");
+  }
+});

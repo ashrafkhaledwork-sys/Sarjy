@@ -3,10 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sarjy</title>
+  <meta name="theme-color" content="#0E7C6B">
+  <title>Sarjy — your voice assistant</title>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <h1>Sarjy</h1>
-  <p>Voice assistant skeleton — UI arrives in Phase 4.</p>
+  <header>
+    <div>
+      <h1>Sarjy</h1>
+      <p id="tagline">Tap the mic and talk — I remember you.</p>
+    </div>
+    <div id="status-dot" class="dot idle" title="status"></div>
+  </header>
+
+  <main id="chat" aria-live="polite"></main>
+
+  <footer>
+    <button id="mic" type="button" aria-label="Hold a voice message">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+      </svg>
+    </button>
+    <form id="form">
+      <input id="input" type="text" placeholder="…or type here" autocomplete="off">
+      <button id="send" type="submit">Send</button>
+    </form>
+  </footer>
+
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

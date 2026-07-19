@@ -1,4 +1,4 @@
-import { speak, startRecording } from "/audio.js";
+import { speak, startRecording } from "/audio.js?v=5";
 
 // --- identity: stable user across sessions, fresh session per tab ---
 const userId = localStorage.getItem("sarjy_user_id") ||
@@ -70,6 +70,7 @@ async function converse(fields) {
 
     if (fields.audio !== undefined) bubble("user", data.transcript);
     bubble("assistant", data.reply_text);
+    if (data.memories_updated) note("💾 memory updated");
     setStatus("speaking", "Speaking…");
     speak(data.audio_b64, data.reply_text, () =>
       setStatus("idle", "Tap the mic and talk — I remember you.")
@@ -94,6 +95,53 @@ form.addEventListener("submit", (e) => {
   input.value = "";
   bubble("user", text);
   converse({ text });
+});
+
+// --- memory drawer ---
+const drawer = document.getElementById("drawer");
+const memoriesBtn = document.getElementById("memories-btn");
+const memoriesList = document.getElementById("memories-list");
+
+async function refreshMemories() {
+  memoriesList.textContent = "";
+  const res = await fetch("/api/memories", { headers: { "X-User-Id": userId } });
+  const data = await res.json();
+  if (!data.memories?.length) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "Nothing yet — tell Sarjy something about yourself.";
+    memoriesList.appendChild(li);
+    return;
+  }
+  for (const m of data.memories) {
+    const li = document.createElement("li");
+    const key = document.createElement("span");
+    key.className = "mem-key";
+    key.textContent = m.key.replaceAll("_", " ");
+    const value = document.createElement("span");
+    value.className = "mem-value";
+    value.textContent = m.value;
+    const del = document.createElement("button");
+    del.className = "mem-delete";
+    del.textContent = "forget";
+    del.addEventListener("click", async () => {
+      await fetch("/api/memories/" + encodeURIComponent(m.key), {
+        method: "DELETE",
+        headers: { "X-User-Id": userId },
+      });
+      refreshMemories();
+    });
+    li.append(key, value, del);
+    memoriesList.appendChild(li);
+  }
+}
+
+memoriesBtn.addEventListener("click", () => {
+  drawer.hidden = false;
+  refreshMemories();
+});
+document.getElementById("drawer-close").addEventListener("click", () => {
+  drawer.hidden = true;
 });
 
 // --- voice path: tap to record, tap again to send ---

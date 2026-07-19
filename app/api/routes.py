@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.core.orchestrator import run_text_turn
 from app.db.engine import get_db
-from app.db.repositories import ConversationRepo
+from app.db.repositories import ConversationRepo, MemoryRepo
 from app.schemas.api import ConverseResponse, Timings
 from app.services import stt, tts
 
@@ -49,7 +49,9 @@ def converse(
     if len(transcript) > 2000:
         raise AppError("invalid_input", "message too long (max 2000 characters)")
 
-    result = run_text_turn(ConversationRepo(db), user_id, session_id, transcript)
+    result = run_text_turn(
+        ConversationRepo(db), MemoryRepo(db), user_id, session_id, transcript
+    )
 
     audio_bytes, tts_ms = tts.synthesize(result.reply_text)
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii") if audio_bytes else None
@@ -58,11 +60,44 @@ def converse(
         transcript=transcript,
         reply_text=result.reply_text,
         audio_b64=audio_b64,
+        memories_updated=result.memories_updated,
         timings=Timings(
             stt_ms=stt_ms,
             llm_ms=result.llm_ms,
+            tool_ms=result.tool_ms,
             tts_ms=tts_ms,
             total_ms=int((perf_counter() - t0) * 1000),
         ),
         request_id=getattr(request.state, "request_id", "unknown"),
     )
+
+
+@router.get("/memories")
+def list_memories(
+    user_id: str = Depends(require_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    memories = MemoryRepo(db).list_for_user(user_id)
+    return {
+        "memories": [
+            {
+                "category": m.category,
+                "key": m.key,
+                "value": m.value,
+                "updated_at": m.updated_at.isoformat(),
+            }
+            for m in memories
+        ]
+    }
+
+
+@router.delete("/memories/{key}")
+def delete_memory(
+    key: str,
+    user_id: str = Depends(require_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    deleted = MemoryRepo(db).delete(user_id, key)
+    if not deleted:
+        raise AppError("invalid_input", f"no memory named {key}", status=404)
+    return {"deleted": key}

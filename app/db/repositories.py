@@ -1,9 +1,40 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import ChatSession, Message, User, utcnow
+from app.db.models import ChatSession, Memory, Message, User, utcnow
 
 HISTORY_WINDOW = 12
+
+
+class MemoryRepo:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def list_for_user(self, user_id: str) -> list[Memory]:
+        stmt = select(Memory).where(Memory.user_id == user_id).order_by(Memory.key)
+        return list(self.db.scalars(stmt).all())
+
+    def upsert(self, user_id: str, category: str, key: str, value: str) -> Memory:
+        stmt = select(Memory).where(Memory.user_id == user_id, Memory.key == key)
+        memory = self.db.scalars(stmt).first()
+        if memory is None:
+            memory = Memory(user_id=user_id, category=category, key=key, value=value)
+            self.db.add(memory)
+        else:  # conflict resolution: newest wins
+            memory.category = category
+            memory.value = value
+            memory.updated_at = utcnow()
+        self.db.commit()
+        return memory
+
+    def delete(self, user_id: str, key: str) -> bool:
+        stmt = select(Memory).where(Memory.user_id == user_id, Memory.key == key)
+        memory = self.db.scalars(stmt).first()
+        if memory is None:
+            return False
+        self.db.delete(memory)
+        self.db.commit()
+        return True
 
 
 class ConversationRepo:

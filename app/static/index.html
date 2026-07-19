@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0E7C6B">
   <title>Sarjy — your voice assistant</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=5">
 </head>
 <body>
   <header>
@@ -13,8 +13,20 @@
       <h1>Sarjy</h1>
       <p id="tagline">Tap the mic and talk — I remember you.</p>
     </div>
-    <div id="status-dot" class="dot idle" title="status"></div>
+    <div class="header-right">
+      <button id="memories-btn" type="button" aria-label="What Sarjy remembers">Memories</button>
+      <div id="status-dot" class="dot idle" title="status"></div>
+    </div>
   </header>
+
+  <aside id="drawer" hidden>
+    <div class="drawer-head">
+      <h2>What Sarjy remembers</h2>
+      <button id="drawer-close" type="button" aria-label="Close">×</button>
+    </div>
+    <ul id="memories-list"></ul>
+    <p class="drawer-note">Facts are saved automatically when you share them. Delete any fact, or just tell Sarjy to forget it.</p>
+  </aside>
 
   <main id="chat" aria-live="polite"></main>
 
@@ -33,6 +45,6 @@
     </form>
   </footer>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=5"></script>
 </body>
 </html>

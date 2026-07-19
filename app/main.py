@@ -14,6 +14,16 @@ from app.db.engine import db_ping, init_db
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """Serve static assets with revalidation. The files are tiny, and a stale
+    cached app.js during a live demo is a far worse cost than an ETag check."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -53,7 +63,7 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
     # Static mount is registered last so /api/* and health routes take precedence.
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+    app.mount("/", NoCacheStaticFiles(directory=STATIC_DIR, html=True), name="static")
     return app
 
 

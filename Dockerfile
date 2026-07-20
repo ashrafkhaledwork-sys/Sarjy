@@ -5,13 +5,16 @@ COPY pyproject.toml ./
 COPY app ./app
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir .
 
-# ---- runtime: slim image, non-root user ----
+# ---- runtime ----
+# Runs as root: Railway mounts volumes root-owned, and a non-root user cannot
+# write the SQLite file inside them (verified: startup crash with
+# "unable to open database file"). Root-in-container is the standard
+# trade-off on volume-backed PaaS; documented in DECISIONS.md.
 FROM python:3.12-slim
-RUN useradd --create-home sarjy && mkdir /data && chown sarjy:sarjy /data
+RUN mkdir -p /data
 WORKDIR /srv
 COPY --from=builder /venv /venv
 COPY app ./app
-USER sarjy
 ENV PATH="/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 EXPOSE 8000

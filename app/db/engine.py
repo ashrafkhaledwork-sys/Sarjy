@@ -31,6 +31,13 @@ def init_db(url: str | None = None) -> None:
     Base.metadata.create_all(_engine)
 
 
+def open_session() -> Session:
+    """A standalone session for background work (caller closes it)."""
+    if _session_factory is None:  # pragma: no cover - guarded by lifespan
+        raise RuntimeError("init_db() was not called")
+    return _session_factory()
+
+
 def get_db() -> Iterator[Session]:
     """FastAPI dependency yielding a DB session."""
     if _session_factory is None:  # pragma: no cover - guarded by lifespan

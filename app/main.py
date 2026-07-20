@@ -30,9 +30,40 @@ class NoCacheStaticFiles(StaticFiles):
         return response
 
 
+def _warm_openai_loop() -> None:
+    """Keep the OpenAI connections AND model routes warm so no user turn pays
+    cold-start costs (measured: first turn 8.7 s cold vs ~3.5 s warm).
+    Route warming costs ~$0.04/day - the cheapest latency win there is."""
+    import time as _time
+
+    from app.services.llm import client
+
+    while True:
+        try:
+            c = client().with_options(max_retries=0)
+            c.chat.completions.create(
+                model=settings.openai_chat_model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+            )
+            c.audio.speech.create(
+                model=settings.openai_tts_model,
+                voice=settings.openai_tts_voice,
+                input="hi",
+                response_format="mp3",
+            ).read()
+        except Exception as exc:  # noqa: BLE001 - warm-up must never crash the app
+            logging.getLogger(__name__).debug("warm-up ping failed: %s", exc)
+        _time.sleep(240)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if settings.app_env not in ("test",) and settings.openai_api_key:
+        import threading
+
+        threading.Thread(target=_warm_openai_loop, daemon=True, name="openai-warm").start()
     yield
 
 

@@ -25,7 +25,10 @@ from app.workflow.slots import missing_slots, validate_slots
 
 AFFIRMATION_RE = re.compile(
     r"(?i)\b(yes|yeah|yep|sure|confirm|confirmed|book it|go ahead|do it|okay|ok|"
-    r"sounds good|correct|please do|that works)\b"
+    r"sounds good|correct|please do|that works"
+    # Egyptian Arabic affirmations; تمام/ماشي guarded against "مش/لا" negation
+    r"|نعم|أيوة|ايوة|أيوه|ايوه|أكيد|اكيد|موافق|احجز|يلا"
+    r"|(?<!مش )(?<!لا )تمام|(?<!مش )(?<!لا )ماشي)\b"
 )
 
 TERMINAL_STATES = ("COMPLETED", "CANCELLED")

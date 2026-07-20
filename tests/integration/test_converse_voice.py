@@ -1,4 +1,3 @@
-import base64
 import uuid
 
 import httpx
@@ -23,7 +22,7 @@ def _post_audio(client, data: bytes = b"fake-webm-audio", filename: str = "speec
 
 
 @respx.mock
-def test_voice_turn_roundtrip(client):
+def test_voice_turn_roundtrip_with_streamed_speech(client):
     respx.post(OPENAI_STT).mock(
         return_value=httpx.Response(200, json={"text": "what is the capital of Japan"})
     )
@@ -37,22 +36,37 @@ def test_voice_turn_roundtrip(client):
     body = r.json()
     assert body["transcript"] == "what is the capital of Japan"
     assert body["reply_text"] == "Tokyo is the capital of Japan."
-    assert base64.b64decode(body["audio_b64"]) == FAKE_MP3
+    # reply returns immediately; audio comes from the streaming endpoint
+    assert body["audio_url"] == f"/api/speech/{body['request_id']}"
     t = body["timings"]
-    assert t["stt_ms"] >= 0 and t["tts_ms"] >= 0 and t["total_ms"] >= t["llm_ms"]
+    assert t["stt_ms"] >= 0 and t["total_ms"] >= t["llm_ms"]
+
+    speech = client.get(body["audio_url"])
+    assert speech.status_code == 200
+    assert speech.headers["content-type"].startswith("audio/mpeg")
+    assert speech.content == FAKE_MP3
 
 
 @respx.mock
-def test_tts_failure_degrades_to_text_only(client):
+def test_tts_failure_surfaces_only_on_speech_endpoint(client):
+    """The turn itself can no longer be hurt by TTS: reply text always returns;
+    a failing speech stream 502s and the client falls back to speechSynthesis."""
     respx.post(OPENAI_STT).mock(return_value=httpx.Response(200, json={"text": "hello"}))
     respx.post(OPENAI_CHAT).mock(return_value=httpx.Response(200, json=openai_chat_json("Hi!")))
     respx.post(OPENAI_TTS).mock(return_value=httpx.Response(500, json={"error": "boom"}))
 
     r = _post_audio(client)
-    assert r.status_code == 200  # the turn still succeeds
-    body = r.json()
-    assert body["reply_text"] == "Hi!"
-    assert body["audio_b64"] is None  # client falls back to speechSynthesis
+    assert r.status_code == 200
+    assert r.json()["reply_text"] == "Hi!"
+
+    speech = client.get(r.json()["audio_url"])
+    assert speech.status_code == 502
+    assert speech.json()["error"]["code"] == "tts_failed"
+
+
+def test_unknown_speech_id_is_404(client):
+    r = client.get("/api/speech/doesnotexist")
+    assert r.status_code == 404
 
 
 @respx.mock
@@ -83,7 +97,7 @@ def test_empty_audio_rejected(client):
 
 
 @respx.mock
-def test_text_path_also_returns_tts_audio(client):
+def test_text_path_also_gets_speech_url(client):
     respx.post(OPENAI_CHAT).mock(return_value=httpx.Response(200, json=openai_chat_json("Sure!")))
     respx.post(OPENAI_TTS).mock(return_value=httpx.Response(200, content=FAKE_MP3))
     r = client.post(
@@ -92,4 +106,4 @@ def test_text_path_also_returns_tts_audio(client):
         headers={"X-User-Id": str(uuid.uuid4())},
     )
     assert r.status_code == 200
-    assert base64.b64decode(r.json()["audio_b64"]) == FAKE_MP3
+    assert client.get(r.json()["audio_url"]).content == FAKE_MP3

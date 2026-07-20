@@ -24,8 +24,9 @@ def transcribe(data: bytes, filename: str, content_type: str | None) -> tuple[st
         resp = client().audio.transcriptions.create(
             model=settings.openai_stt_model,
             file=(filename or "audio.webm", data, content_type or "application/octet-stream"),
-            # Bias proper-noun spelling toward the assistant's name.
-            prompt="The user is talking to a voice assistant named Sarjy.",
+            # Bias proper-noun spelling; the user may speak English or Arabic.
+            prompt="The user is talking to a voice assistant named Sarjy, "
+            "in English or Egyptian Arabic.",
         )
     except OpenAIError as exc:
         logger.error("STT failed: %s: %s", type(exc).__name__, exc)

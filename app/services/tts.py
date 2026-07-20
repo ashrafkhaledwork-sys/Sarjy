@@ -9,6 +9,20 @@ from app.services.llm import client
 logger = logging.getLogger(__name__)
 
 
+def stream_synthesize(text: str):
+    """Yield MP3 chunks as OpenAI produces them - the browser's <audio> starts
+    playing on the first chunks, cutting time-to-first-audio by roughly the
+    full synthesis duration. Raises OpenAIError before the first chunk if the
+    provider rejects the request (mid-stream failures end the stream early)."""
+    with client().audio.speech.with_streaming_response.create(
+        model=settings.openai_tts_model,
+        voice=settings.openai_tts_voice,
+        input=text,
+        response_format="mp3",
+    ) as resp:
+        yield from resp.iter_bytes(chunk_size=4096)
+
+
 def synthesize(text: str) -> tuple[bytes | None, int]:
     """Text-to-speech. Returns (mp3_bytes, elapsed_ms); (None, ms) on failure.
 

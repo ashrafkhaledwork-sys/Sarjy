@@ -2,6 +2,14 @@ import logging
 
 from openai import OpenAI, OpenAIError
 
+# Pre-load the SDK's lazily-imported resource modules on the main thread.
+# Moderation runs on a worker thread; concurrent lazy imports deadlock
+# (_frozen_importlib._DeadlockError seen in tests).
+from openai.resources import chat as _preload_chat  # noqa: F401
+from openai.resources import moderations as _preload_moderations  # noqa: F401
+from openai.resources.audio import speech as _preload_speech  # noqa: F401
+from openai.resources.audio import transcriptions as _preload_stt  # noqa: F401
+
 from app.config import settings
 from app.core.errors import AppError
 

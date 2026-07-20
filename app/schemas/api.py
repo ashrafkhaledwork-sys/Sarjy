@@ -20,7 +20,7 @@ class Timings(BaseModel):
 class ConverseResponse(BaseModel):
     transcript: str
     reply_text: str
-    audio_b64: str | None = None
+    audio_url: str | None = None
     workflow: WorkflowInfo = Field(default_factory=WorkflowInfo)
     memories_updated: bool = False
     timings: Timings = Field(default_factory=Timings)

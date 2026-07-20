@@ -267,3 +267,9 @@ class TestValidators:
             assert AFFIRMATION_RE.search(text), text
         for text in ("no", "wait", "hmm let me think", "change the time"):
             assert not AFFIRMATION_RE.search(text), text
+
+    def test_arabic_affirmations(self):
+        for text in ("نعم", "كله تمام نعم", "أيوة احجز", "ماشي", "تمام يلا", "أكيد"):
+            assert AFFIRMATION_RE.search(text), text
+        for text in ("لا", "مش تمام", "لا ماشي غير كده", "استنى شوية"):
+            assert not AFFIRMATION_RE.search(text), text

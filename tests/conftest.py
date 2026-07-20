@@ -11,6 +11,7 @@ _db_fd, _db_path = tempfile.mkstemp(prefix="sarjy_test_", suffix=".db")
 os.close(_db_fd)
 os.environ["DATABASE_URL"] = "sqlite:///" + _db_path.replace("\\", "/")
 os.environ["OPENAI_API_KEY"] = "sk-test-not-a-real-key"
+os.environ["APP_ENV"] = "test"  # disables the connection warm-up thread
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -23,6 +24,15 @@ def client():
     # Context manager runs lifespan (init_db) against the throwaway DB.
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _no_background_extraction(monkeypatch):
+    """The background memory sweep would race with sequenced respx mocks.
+    It is disabled globally and covered directly in test_extraction.py."""
+    monkeypatch.setattr(
+        "app.core.orchestrator.extraction.submit_sweep", lambda *a, **k: None
+    )
 
 
 def openai_chat_json(content: str) -> dict:

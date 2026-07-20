@@ -5,10 +5,17 @@ from time import perf_counter
 from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from openai import OpenAIError
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.orchestrator import run_text_turn
+from app.core.ratelimit import (
+    CONVERSE_IP_LIMIT,
+    CONVERSE_LIMIT,
+    SPEECH_LIMIT,
+    limiter,
+)
 from app.db.engine import get_db
 from app.db.repositories import BookingRepo, ConversationRepo, MemoryRepo
 from app.schemas.api import ConverseResponse, Timings, WorkflowInfo
@@ -34,6 +41,8 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 @router.post("/converse")
+@limiter.limit(CONVERSE_LIMIT)
+@limiter.limit(CONVERSE_IP_LIMIT, key_func=get_remote_address)
 def converse(
     request: Request,
     session_id: str = Form(...),
@@ -101,7 +110,8 @@ def converse(
 
 
 @router.get("/speech/{request_id}")
-def speech(request_id: str) -> StreamingResponse:
+@limiter.limit(SPEECH_LIMIT, key_func=get_remote_address)
+def speech(request: Request, request_id: str) -> StreamingResponse:
     """Stream the TTS audio for a recent reply. Opaque id: no text in URLs."""
     text = reply_cache.get(request_id)
     if text is None:
@@ -157,6 +167,15 @@ def list_memories(
             for m in memories
         ]
     }
+
+
+@router.delete("/memories")
+def delete_all_memories(
+    user_id: str = Depends(require_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    count = MemoryRepo(db).delete_all(user_id)
+    return {"deleted": count}
 
 
 @router.delete("/memories/{key}")

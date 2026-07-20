@@ -6,10 +6,12 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import router as api_router
 from app.config import APP_VERSION, settings
 from app.core.errors import AppError
+from app.core.ratelimit import limiter
 from app.db.engine import db_ping, init_db
 
 logging.basicConfig(
@@ -67,8 +69,22 @@ async def lifespan(app: FastAPI):
     yield
 
 
+def _error_envelope(request: Request, code: str, message: str, status: int) -> JSONResponse:
+    return JSONResponse(
+        status_code=status,
+        content={
+            "error": {
+                "code": code,
+                "message": message,
+                "request_id": getattr(request.state, "request_id", "unknown"),
+            }
+        },
+    )
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Sarjy", version=APP_VERSION, lifespan=lifespan)
+    app.state.limiter = limiter
 
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
@@ -79,15 +95,20 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError):
-        return JSONResponse(
-            status_code=exc.status,
-            content={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "request_id": getattr(request.state, "request_id", "unknown"),
-                }
-            },
+        return _error_envelope(request, exc.code, exc.message, exc.status)
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        return _error_envelope(
+            request, "rate_limited", "Too many requests - give it a minute.", 429
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_handler(request: Request, exc: Exception):
+        # Whatever breaks, the client gets the envelope - never a stack trace.
+        logging.getLogger(__name__).exception("unhandled error: %s", exc)
+        return _error_envelope(
+            request, "internal_error", "Something went wrong on our side.", 500
         )
 
     @app.get("/healthz")

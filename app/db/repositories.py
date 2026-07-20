@@ -69,6 +69,13 @@ class MemoryRepo:
         self.db.commit()
         return True
 
+    def delete_all(self, user_id: str) -> int:
+        memories = self.list_for_user(user_id)
+        for memory in memories:
+            self.db.delete(memory)
+        self.db.commit()
+        return len(memories)
+
 
 class ConversationRepo:
     def __init__(self, db: Session):

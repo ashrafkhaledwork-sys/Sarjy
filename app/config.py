@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/sarjy.db"
     app_env: str = "dev"
     log_level: str = "INFO"
+    rate_limit_enabled: bool = True
 
 
 settings = Settings()

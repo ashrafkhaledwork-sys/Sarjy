@@ -166,6 +166,7 @@ async function refreshMemories() {
   memoriesList.textContent = "";
   const res = await fetch("/api/memories", { headers: { "X-User-Id": userId } });
   const data = await res.json();
+  document.getElementById("forget-all").hidden = !data.memories?.length;
   if (!data.memories?.length) {
     const li = document.createElement("li");
     li.className = "empty";
@@ -198,6 +199,12 @@ async function refreshMemories() {
 
 memoriesBtn.addEventListener("click", () => {
   drawer.hidden = false;
+  refreshMemories();
+});
+
+const forgetAll = document.getElementById("forget-all");
+forgetAll.addEventListener("click", async () => {
+  await fetch("/api/memories", { method: "DELETE", headers: { "X-User-Id": userId } });
   refreshMemories();
 });
 document.getElementById("drawer-close").addEventListener("click", () => {

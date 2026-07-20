@@ -43,3 +43,6 @@ select = ["E", "F", "I", "W", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the repo root on sys.path so `from tests.conftest import ...` resolves
+# regardless of how pytest is invoked (bare `pytest` in CI vs `python -m pytest`).
+pythonpath = ["."]

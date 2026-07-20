@@ -36,7 +36,13 @@ BOOKING_TOOL_SPECS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "cuisine": {"type": "string"},
+                    "cuisine": {
+                        "type": "string",
+                        "description": (
+                            "searchable cuisine keyword: seafood, grill, steakhouse, "
+                            "sushi, italian, pizza, burgers - not vague words like 'meat'"
+                        ),
+                    },
                     "area": {"type": "string", "description": "neighborhood or city"},
                     "party_size": {"type": "integer"},
                     "date": {"type": "string", "description": "YYYY-MM-DD"},

@@ -36,10 +36,43 @@ class PlacesProvider(Protocol):
     def search(self, query: str, near: str, limit: int) -> list[Restaurant]: ...
 
 
+def geocode(area: str) -> tuple[float, float] | None:
+    """Resolve an area to (lat, lon) via Geoapify - far stronger than
+    Foursquare's own `near` geocoder for districts and Arabic names
+    (verified: 'New Cairo' and 'التجمع الخامس' fail on Foursquare's geocoder
+    but resolve fine here). Falls back to an Egypt-biased retry, then None."""
+    if not settings.geoapify_api_key:
+        return None
+    for text in (area, f"{area}, Egypt"):
+        try:
+            resp = httpx.get(
+                "https://api.geoapify.com/v1/geocode/search",
+                params={"text": text, "limit": 1, "apiKey": settings.geoapify_api_key},
+                timeout=TIMEOUT,
+            )
+            resp.raise_for_status()
+            features = resp.json().get("features", [])
+            if features:
+                lon, lat = features[0]["geometry"]["coordinates"]
+                return lat, lon
+        except Exception as exc:  # noqa: BLE001 - geocoding is best-effort
+            logger.info("geocode attempt failed for %r: %s", text, exc)
+            continue
+    return None
+
+
 class FoursquareProvider:
     BASE = "https://places-api.foursquare.com/places/search"
+    RADIUS_M = 8000
 
     def search(self, query: str, near: str, limit: int) -> list[Restaurant]:
+        # Precise coordinates beat Foursquare's fragile `near` geocoding.
+        coords = geocode(near)
+        location = (
+            {"ll": f"{coords[0]},{coords[1]}", "radius": self.RADIUS_M}
+            if coords
+            else {"near": near}
+        )
         resp = httpx.get(
             self.BASE,
             headers={
@@ -49,7 +82,7 @@ class FoursquareProvider:
             },
             # Default fields only: rating/price are premium-tier on the free plan
             # and requesting them draws from a separate, tiny quota bucket (429s).
-            params={"query": query, "near": near, "limit": limit},
+            params={"query": query, "limit": limit, **location},
             timeout=TIMEOUT,
         )
         resp.raise_for_status()

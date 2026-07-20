@@ -23,6 +23,12 @@ let convoMode = false; // voice conversation: mic reopens after each reply
 
 const IDLE_TAGLINE = "Tap the orb once and just talk — I'll know when you're done.";
 
+// Timing chips are a measurement instrument, not a product feature:
+// visible only with ?debug in the URL (or a persisted flag for demos).
+const debugMode =
+  new URLSearchParams(location.search).has("debug") ||
+  localStorage.getItem("sarjy_debug") === "1";
+
 function setStatus(state, label) {
   statusDot.className = "dot " + state;
   tagline.textContent = label;
@@ -93,8 +99,15 @@ async function converse(fields) {
     mic.classList.add("speaking");
     currentSpeech = speak(data.audio_url, data.reply_text, {
       onStart: () => {
-        const ttfa = ((performance.now() - turnStart) / 1000).toFixed(2);
-        note(`⚡ first audio in ${ttfa}s`);
+        if (debugMode) {
+          const ttfa = ((performance.now() - turnStart) / 1000).toFixed(2);
+          const t = data.timings || {};
+          const parts = [];
+          if (t.stt_ms) parts.push(`stt ${(t.stt_ms / 1000).toFixed(1)}s`);
+          if (t.llm_ms) parts.push(`llm ${(t.llm_ms / 1000).toFixed(1)}s`);
+          if (t.tool_ms) parts.push(`tools ${(t.tool_ms / 1000).toFixed(1)}s`);
+          note(`⚡ first audio in ${ttfa}s (${parts.join(" · ")})`);
+        }
       },
       onDone: () => {
         currentSpeech = null;

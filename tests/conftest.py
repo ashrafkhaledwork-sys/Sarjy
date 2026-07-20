@@ -13,6 +13,7 @@ os.environ["DATABASE_URL"] = "sqlite:///" + _db_path.replace("\\", "/")
 os.environ["OPENAI_API_KEY"] = "sk-test-not-a-real-key"
 os.environ["APP_ENV"] = "test"  # disables the connection warm-up thread
 os.environ["RATE_LIMIT_ENABLED"] = "false"  # re-enabled only inside the rate-limit test
+os.environ["GEOAPIFY_API_KEY"] = ""  # geocoding path is opted into per-test
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

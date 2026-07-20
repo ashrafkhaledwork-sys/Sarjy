@@ -58,3 +58,25 @@ def test_search_survives_timeout():
 def test_zero_results_is_not_an_error():
     respx.get(FSQ).mock(return_value=httpx.Response(200, json={"results": []}))
     assert search_restaurants("sushi", "Nowhere") == {"restaurants": []}
+
+
+@respx.mock
+def test_geocoded_areas_use_precise_coordinates(monkeypatch):
+    """Foursquare's `near` geocoder fails on districts like 'New Cairo';
+    with a Geoapify key we geocode first and send ll+radius instead."""
+    monkeypatch.setattr(
+        "app.tools.places.settings.geoapify_api_key", "test-geo-key", raising=False
+    )
+    respx.get("https://api.geoapify.com/v1/geocode/search").mock(
+        return_value=httpx.Response(
+            200,
+            json={"features": [{"geometry": {"coordinates": [31.476, 30.028]}}]},
+        )
+    )
+    fsq = respx.get(FSQ).mock(return_value=httpx.Response(200, json=FSQ_PAYLOAD))
+    result = search_restaurants("sushi", "New Cairo")
+    assert result["restaurants"]
+    sent = fsq.calls[0].request.url
+    assert sent.params["ll"] == "30.028,31.476"
+    assert "near" not in sent.params
+    assert sent.params["radius"] == "8000"

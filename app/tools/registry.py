@@ -31,7 +31,9 @@ BOOKING_TOOL_SPECS = [
             "description": (
                 "Start or update a restaurant booking with details the user just gave. "
                 "Convert dates to YYYY-MM-DD and times to 24h HH:MM using today's date "
-                "from the system message. Only pass values the user actually stated."
+                "from the system message. Only pass values the user actually stated. "
+                "If the user asked for a specific restaurant and it appears in the "
+                "returned options, follow up with select_option in the same turn."
             ),
             "parameters": {
                 "type": "object",

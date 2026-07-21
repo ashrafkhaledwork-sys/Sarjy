@@ -153,11 +153,18 @@ const wfStatus = document.getElementById("wf-status");
 const wfDetail = document.getElementById("wf-detail");
 
 function renderWorkflow(wf) {
+  const fmtTime = (t) => {
+    const [h, m] = String(t).split(":").map(Number);
+    if (Number.isNaN(h)) return t;
+    const h12 = h % 12 || 12;
+    const suffix = h < 12 ? "AM" : "PM";
+    return m ? `${h12}:${String(m).padStart(2, "0")} ${suffix}` : `${h12} ${suffix}`;
+  };
   const parts = [];
   const slots = wf?.slots || {};
   const labels = { cuisine: "cuisine", area: "area", party_size: "party", date: "date", time: "time" };
   for (const [k, label] of Object.entries(labels)) {
-    if (slots[k]) parts.push(`${label}: ${slots[k]}`);
+    if (slots[k]) parts.push(`${label}: ${k === "time" ? fmtTime(slots[k]) : slots[k]}`);
   }
   if (wf?.selected) parts.push(`→ ${wf.selected}`);
   if (wf?.missing?.length) parts.push(`missing: ${wf.missing.join(", ")}`);

@@ -47,12 +47,26 @@ LEGAL_TOOLS: dict[str, frozenset[str]] = {
 SEARCH_LIMIT = 3
 
 
+def speakable_time(hhmm: str | None) -> str | None:
+    """'21:00' -> '9 PM', '19:30' -> '7:30 PM' - TTS reads 24h as 'twenty-one
+    hundred', which users mishear."""
+    if not hhmm:
+        return hhmm
+    try:
+        hour, minute = (int(p) for p in hhmm.split(":"))
+    except ValueError:
+        return hhmm
+    suffix = "AM" if hour < 12 else "PM"
+    hour12 = hour % 12 or 12
+    return f"{hour12}:{minute:02d} {suffix}" if minute else f"{hour12} {suffix}"
+
+
 def _summary(booking: Booking) -> str:
     s = booking.slots
     name = (booking.restaurant or {}).get("name", "the selected restaurant")
     return (
-        f"{name} for {s.get('party_size')} people on {s.get('date')} at {s.get('time')}"
-        f" in {s.get('area')}"
+        f"{name} for {s.get('party_size')} people on {s.get('date')} at "
+        f"{speakable_time(s.get('time'))} in {s.get('area')}"
     )
 
 

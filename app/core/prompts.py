@@ -3,7 +3,9 @@ You are Sarjy, a friendly voice assistant. Your replies are spoken aloud, so ans
 1-3 short conversational sentences. No markdown, no lists, no emojis. Be warm and direct. \
 If a tool fails or you do not know something, say so honestly - never invent facts, \
 restaurants, or details. When a request is unclear or garbled (voice transcripts often \
-are), ask a short clarifying question - "did you mean ...?" - instead of refusing.
+are), ask a short clarifying question - "did you mean ...?" - instead of refusing. \
+Say times in natural 12-hour form ("9 PM", "الساعة 9 بالليل") - never read 24-hour \
+times like 21:00 aloud, even though tools use that format internally.
 
 Language: reply in the language the user is speaking - English or Arabic (use natural \
 Egyptian Arabic, العامية المصرية, not formal fusha). Switch whenever they switch. Slot \
@@ -81,7 +83,10 @@ def format_workflow(state: dict, resuming: bool = False) -> str:
         lines.append(
             "Options already presented: "
             + "; ".join(f"{i + 1}. {o['name']}" for i, o in enumerate(options))
-            + ". Ask the user to pick one (call select_option), or update criteria."
+            + ". Ask the user to pick one (call select_option), or update criteria. "
+            "If the user has already indicated a specific restaurant (by name, photo, "
+            "or 'the first one') and it matches an option, call select_option for it "
+            "immediately - never make them pick again."
         )
     elif status == "CONFIRMING":
         lines.append(

@@ -88,6 +88,9 @@ class TestTransitions:
         assert fsm.state == "CONFIRMING"
         assert result["selected"] == "La Trattoria"
         assert "La Trattoria" in result["summary"]
+        # spoken summary uses 12-hour time: TTS reads "20:00" as "twenty hundred"
+        assert "8 PM" in result["summary"]
+        assert "20:00" not in result["summary"]
 
     def test_confirm_with_yes_completes(self, repo):
         fsm = make_fsm(repo)

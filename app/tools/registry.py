@@ -135,17 +135,9 @@ def dispatch(name: str, raw_args: str, ctx: ToolContext) -> dict:
 
     # Deterministic legality gate: the FSM's per-state table decides what the
     # model may do - before any tool logic runs.
-    if ctx.fsm is not None:
-        if name in BOOKING_TOOLS and name not in ctx.fsm.legal_tools():
-            logger.info("tool %s blocked: illegal in state %s", name, ctx.fsm.state)
-            return ctx.fsm.illegal_result(name)
-        if name == "search_restaurants" and ctx.fsm.has_active_booking:
-            return {
-                "error": (
-                    "a booking is in progress - use update_booking; the search runs "
-                    "automatically once the details are complete"
-                )
-            }
+    if ctx.fsm is not None and name in BOOKING_TOOLS and name not in ctx.fsm.legal_tools():
+        logger.info("tool %s blocked: illegal in state %s", name, ctx.fsm.state)
+        return ctx.fsm.illegal_result(name)
 
     try:
         if name == "save_memory":
@@ -160,7 +152,21 @@ def dispatch(name: str, raw_args: str, ctx: ToolContext) -> dict:
             ctx.memories_updated = ctx.memories_updated or "deleted" in result
         elif name == "search_restaurants":
             parsed = SearchRestaurantsArgs.model_validate(args)
-            result = places.search_restaurants(parsed.query, parsed.near, parsed.limit)
+            if ctx.fsm is not None and ctx.fsm.has_active_booking:
+                # Mid-booking searches ARE criteria changes: redirect into the
+                # FSM so "what about sushi in Maadi?" updates the booking and
+                # re-searches instead of dead-ending on a blocked tool.
+                fields: dict = {"area": parsed.near}
+                if parsed.query and parsed.query != "restaurant":
+                    fields["cuisine"] = parsed.query
+                result = ctx.fsm.apply_update(fields)
+                if "error" not in result:
+                    result["note"] = (
+                        "the booking in progress was updated with these criteria "
+                        "and re-searched - present the new options"
+                    )
+            else:
+                result = places.search_restaurants(parsed.query, parsed.near, parsed.limit)
         elif name == "update_booking":
             result = ctx.fsm.apply_update(UpdateBookingArgs.model_validate(args).provided())
         elif name == "select_option":

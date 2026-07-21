@@ -178,6 +178,57 @@ def test_resume_across_sessions_with_offer(client):
 
 
 @respx.mock
+def test_mid_booking_search_redirects_into_criteria_change(client):
+    """User in CONFIRMING asks 'what about steak in New Cairo?' - even if the
+    model reaches for the general search tool, the registry converts it into a
+    booking update + re-search instead of a dead end."""
+    user_id = str(uuid.uuid4())
+    session = str(uuid.uuid4())
+    respx.get(FSQ).mock(return_value=httpx.Response(200, json=FSQ_JSON))
+    chat = respx.post(OPENAI_CHAT)
+
+    chat.side_effect = [
+        httpx.Response(
+            200,
+            json=openai_tool_call_json(
+                "update_booking",
+                json.dumps(
+                    {"area": "Zamalek", "party_size": 2, "date": TOMORROW, "time": "19:00"}
+                ),
+            ),
+        ),
+        httpx.Response(200, json=openai_chat_json("Options found.")),
+    ]
+    _post(client, "book fish in Zamalek tomorrow 7pm for 2", session, user_id)
+
+    chat.side_effect = [
+        httpx.Response(200, json=openai_tool_call_json("select_option", json.dumps({"n": 1}))),
+        httpx.Response(200, json=openai_chat_json("Confirm La Trattoria?")),
+    ]
+    _post(client, "first one", session, user_id)  # now CONFIRMING
+
+    chat.side_effect = [
+        httpx.Response(
+            200,
+            json=openai_tool_call_json(
+                "search_restaurants", json.dumps({"query": "steak", "near": "New Cairo"})
+            ),
+        ),
+        httpx.Response(200, json=openai_chat_json("Here are steak options in New Cairo.")),
+    ]
+    r = _post(client, "what about a steak restaurant in New Cairo?", session, user_id)
+    wf = r.json()["workflow"]
+    assert wf["status"] == "PRESENTING"  # back to options, selection cleared
+    assert wf["slots"]["cuisine"] == "steak"
+    assert wf["slots"]["area"] == "New Cairo"
+    assert wf["selected"] is None
+
+    sent = json.loads(chat.calls[-1].request.content)
+    tool_msgs = [m for m in sent["messages"] if m["role"] == "tool"]
+    assert "updated with these criteria" in tool_msgs[-1]["content"]
+
+
+@respx.mock
 def test_illegal_tool_call_blocked_by_legality_table(client):
     """select_option before any booking exists -> registry blocks it via the FSM."""
     user_id = str(uuid.uuid4())

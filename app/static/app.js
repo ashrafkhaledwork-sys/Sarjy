@@ -95,6 +95,10 @@ async function converse(fields) {
     bubble("assistant", data.reply_text);
     if (data.memories_updated) note("💾 memory updated");
     renderWorkflow(data.workflow);
+    // a farewell ends hands-free mode: the mic must not reopen after "bye"
+    if (/\b(bye|goodbye|bye[- ]?bye|see you|good night|مع السلامة|باي|سلام)\b/i.test(data.transcript)) {
+      convoMode = false;
+    }
     setStatus("speaking", "Speaking…");
     mic.classList.add("speaking");
     currentSpeech = speak(data.audio_url, data.reply_text, {

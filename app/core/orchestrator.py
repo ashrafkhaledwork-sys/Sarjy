@@ -7,7 +7,12 @@ from datetime import date
 from time import perf_counter
 
 from app.core import extraction
-from app.core.prompts import build_system_prompt, format_memories, format_workflow
+from app.core.prompts import (
+    build_system_prompt,
+    format_bookings,
+    format_memories,
+    format_workflow,
+)
 from app.db.repositories import BookingRepo, ConversationRepo, MemoryRepo
 from app.services import llm, moderation
 from app.tools import registry
@@ -70,6 +75,7 @@ def run_text_turn(
         memories_block=format_memories(memories),
         workflow_block=format_workflow(fsm.public_state(), resuming=first_message_of_session),
         today_line=f"Today is {today.strftime('%A')}, {today.isoformat()}.",
+        bookings_block=format_bookings(booking_repo.list_for_user(user_id)[:5]),
     )
     history = [{"role": m.role, "content": m.content} for m in repo.recent_messages(session_id)]
     if image is not None and history:

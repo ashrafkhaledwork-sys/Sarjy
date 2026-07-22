@@ -95,8 +95,12 @@ async function converse(fields) {
     bubble("assistant", data.reply_text);
     if (data.memories_updated) note("💾 memory updated");
     renderWorkflow(data.workflow);
-    // a farewell ends hands-free mode: the mic must not reopen after "bye"
-    if (/\b(bye|goodbye|bye[- ]?bye|see you|good night|مع السلامة|باي|سلام)\b/i.test(data.transcript)) {
+    // a farewell ends hands-free mode: the mic must not reopen after "bye".
+    // NOTE: JS \b only understands Latin word chars - Arabic needs explicit
+    // space/punctuation boundaries or it can never match.
+    const enFarewell = /\b(bye|goodbye|bye[- ]?bye|see you|good ?night|salam)\b/i;
+    const arFarewell = /(?:^|[\s.,!؟،])(سلام|مع السلامة|باي|تصبح على خير)(?=$|[\s.,!؟،])/;
+    if (enFarewell.test(data.transcript) || arFarewell.test(data.transcript)) {
       convoMode = false;
     }
     setStatus("speaking", "Speaking…");

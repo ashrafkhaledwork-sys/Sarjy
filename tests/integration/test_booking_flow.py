@@ -229,6 +229,81 @@ def test_mid_booking_search_redirects_into_criteria_change(client):
 
 
 @respx.mock
+def test_confirm_with_named_option_auto_selects(client):
+    """User in PRESENTING says 'yes book La Trattoria' and the model jumps
+    straight to confirm_booking: the registry auto-selects the named option
+    so the confirmation succeeds in one turn."""
+    user_id = str(uuid.uuid4())
+    session = str(uuid.uuid4())
+    respx.get(FSQ).mock(return_value=httpx.Response(200, json=FSQ_JSON))
+    chat = respx.post(OPENAI_CHAT)
+
+    chat.side_effect = [
+        httpx.Response(
+            200,
+            json=openai_tool_call_json(
+                "update_booking",
+                json.dumps(
+                    {"area": "Zamalek", "party_size": 2, "date": TOMORROW, "time": "19:00"}
+                ),
+            ),
+        ),
+        httpx.Response(200, json=openai_chat_json("Pick one!")),
+    ]
+    _post(client, "book dinner for 2 in Zamalek tomorrow 7pm", session, user_id)  # PRESENTING
+
+    chat.side_effect = [
+        httpx.Response(200, json=openai_tool_call_json("confirm_booking", "{}")),
+        httpx.Response(200, json=openai_chat_json("Booked at La Trattoria!")),
+    ]
+    r = _post(client, "yes, confirm La Trattoria please", session, user_id)
+    assert r.json()["workflow"]["status"] == "COMPLETED"
+    assert r.json()["workflow"]["selected"] == "La Trattoria"
+
+
+@respx.mock
+def test_booking_history_injected_into_prompt(client):
+    """A completed booking is visible to the model in later turns, so
+    'what are my bookings?' answers from data."""
+    user_id = str(uuid.uuid4())
+    session = str(uuid.uuid4())
+    respx.get(FSQ).mock(return_value=httpx.Response(200, json=FSQ_JSON))
+    chat = respx.post(OPENAI_CHAT)
+
+    chat.side_effect = [
+        httpx.Response(
+            200,
+            json=openai_tool_call_json(
+                "update_booking",
+                json.dumps(
+                    {"area": "Zamalek", "party_size": 4, "date": TOMORROW, "time": "20:00"}
+                ),
+            ),
+        ),
+        httpx.Response(200, json=openai_chat_json("Options!")),
+    ]
+    _post(client, "book for 4 in Zamalek tomorrow 8pm", session, user_id)
+    chat.side_effect = [
+        httpx.Response(200, json=openai_tool_call_json("select_option", json.dumps({"n": 1}))),
+        httpx.Response(200, json=openai_chat_json("Confirm?")),
+    ]
+    _post(client, "first one", session, user_id)
+    chat.side_effect = [
+        httpx.Response(200, json=openai_tool_call_json("confirm_booking", "{}")),
+        httpx.Response(200, json=openai_chat_json("Booked!")),
+    ]
+    _post(client, "yes", session, user_id)
+
+    chat.side_effect = [
+        httpx.Response(200, json=openai_chat_json("You have one booking at La Trattoria.")),
+    ]
+    _post(client, "what bookings do I have?", session, user_id)
+    system = json.loads(chat.calls[-1].request.content)["messages"][0]["content"]
+    assert "This user's bookings" in system
+    assert "COMPLETED: La Trattoria" in system
+
+
+@respx.mock
 def test_illegal_tool_call_blocked_by_legality_table(client):
     """select_option before any booking exists -> registry blocks it via the FSM."""
     user_id = str(uuid.uuid4())

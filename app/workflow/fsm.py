@@ -26,6 +26,8 @@ from app.workflow.slots import missing_slots, validate_slots
 AFFIRMATION_RE = re.compile(
     r"(?i)\b(yes|yeah|yep|sure|confirm|confirmed|book it|go ahead|do it|okay|ok|"
     r"sounds good|correct|please do|that works"
+    # transliterated Egyptian Arabic (typed or produced by STT)
+    r"|na'?am|naam|aywa|aiwa|akeed|tamam|mashi|yalla"
     # Egyptian Arabic affirmations; تمام/ماشي guarded against "مش/لا" negation
     r"|نعم|أيوة|ايوة|أيوه|ايوه|أكيد|اكيد|موافق|احجز|يلا"
     r"|(?<!مش )(?<!لا )تمام|(?<!مش )(?<!لا )ماشي)\b"
@@ -37,7 +39,11 @@ TERMINAL_STATES = ("COMPLETED", "CANCELLED")
 LEGAL_TOOLS: dict[str, frozenset[str]] = {
     "IDLE": frozenset({"update_booking"}),
     "COLLECTING": frozenset({"update_booking", "cancel_booking"}),
-    "PRESENTING": frozenset({"update_booking", "select_option", "cancel_booking"}),
+    # confirm_booking is *attemptable* here: the registry auto-selects a
+    # uniquely-named option first, else confirm() returns an actionable error.
+    "PRESENTING": frozenset(
+        {"update_booking", "select_option", "confirm_booking", "cancel_booking"}
+    ),
     "CONFIRMING": frozenset({"update_booking", "confirm_booking", "cancel_booking"}),
     # terminal states: update_booking starts a fresh booking
     "COMPLETED": frozenset({"update_booking"}),
@@ -196,6 +202,18 @@ class BookingFSM:
         }
 
     def confirm(self, user_text: str) -> dict:
+        if self.state == "PRESENTING":
+            # Actionable recovery instead of a bare "illegal": the model must
+            # get a selection first - never flounder in vague failure.
+            options = self.booking.options or []
+            names = "; ".join(f"{i + 1}. {o.get('name', '?')}" for i, o in enumerate(options))
+            return {
+                "error": (
+                    f"no restaurant is selected yet. Options: {names}. If the user "
+                    "already named one, call select_option with its number now; "
+                    "otherwise ask them to pick one."
+                )
+            }
         if self.state != "CONFIRMING":
             return self.illegal_result("confirm_booking")
         if not AFFIRMATION_RE.search(user_text):

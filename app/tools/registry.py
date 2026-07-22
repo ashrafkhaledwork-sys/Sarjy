@@ -174,6 +174,18 @@ def dispatch(name: str, raw_args: str, ctx: ToolContext) -> dict:
         elif name == "select_option":
             result = ctx.fsm.select_option(SelectOptionArgs.model_validate(args).n)
         elif name == "confirm_booking":
+            # If the user already named one of the presented options, honor it:
+            # auto-select before confirming instead of dead-ending on the guard.
+            if ctx.fsm.state == "PRESENTING":
+                options = ctx.fsm.booking.options or []
+                text = ctx.user_text.lower()
+                matches = [
+                    i + 1
+                    for i, o in enumerate(options)
+                    if o.get("name") and o["name"].lower() in text
+                ]
+                if len(matches) == 1:
+                    ctx.fsm.select_option(matches[0])
             result = ctx.fsm.confirm(ctx.user_text)
         elif name == "cancel_booking":
             result = ctx.fsm.cancel()

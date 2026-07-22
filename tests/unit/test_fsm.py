@@ -151,6 +151,17 @@ class TestGuards:
         result = fsm.confirm("yes")
         assert "error" in result  # COMPLETED is terminal: confirm is illegal
 
+    def test_confirm_in_presenting_returns_actionable_options(self, repo):
+        """The 'yes, confirm' before selecting must not dead-end: the error
+        names the options and tells the model to select first."""
+        fsm = make_fsm(repo)
+        fsm.apply_update(dict(FULL))  # PRESENTING
+        result = fsm.confirm("yes, please confirm the booking")
+        assert "error" in result
+        assert "La Trattoria" in result["error"]
+        assert "select_option" in result["error"]
+        assert fsm.state == "PRESENTING"
+
     def test_select_illegal_in_collecting(self, repo):
         fsm = make_fsm(repo)
         fsm.apply_update({"party_size": 4})
@@ -168,7 +179,9 @@ class TestGuards:
         assert fsm.legal_tools() == {"update_booking"}
         fsm.apply_update(dict(FULL))
         assert "select_option" in fsm.legal_tools()
-        assert "confirm_booking" not in fsm.legal_tools()
+        # confirm is attemptable in PRESENTING (auto-select / actionable error),
+        # but confirm() itself still refuses without a selection:
+        assert "error" in fsm.confirm("yes")
         fsm.select_option(1)
         assert "confirm_booking" in fsm.legal_tools()
 
@@ -276,3 +289,8 @@ class TestValidators:
             assert AFFIRMATION_RE.search(text), text
         for text in ("لا", "مش تمام", "لا ماشي غير كده", "استنى شوية"):
             assert not AFFIRMATION_RE.search(text), text
+
+    def test_transliterated_affirmations(self):
+        # STT and typing sometimes produce Latin-script Arabic
+        for text in ("Naam.", "aywa book it", "tamam", "akeed yalla"):
+            assert AFFIRMATION_RE.search(text), text

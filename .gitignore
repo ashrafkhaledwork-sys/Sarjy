@@ -15,8 +15,14 @@ dist/
 data/
 *.db
 
-# editor / os
+# editor / os / local tooling
 .vscode/
 .idea/
+.claude/
 Thumbs.db
 .DS_Store
+docs/presentation/Sarjy-Presentation.pptx
+docs/presentation/PRESENTATION.md
+docs/Sarjy-TRD.pdf
+docs/Sarjy-PRD.pdf
+docs/Sarjy-Overview.pdf

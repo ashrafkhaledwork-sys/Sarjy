@@ -1,4 +1,6 @@
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 from openai import OpenAI, OpenAIError
 
@@ -29,9 +31,25 @@ def client() -> OpenAI:
     return _client
 
 
-def chat(messages: list[dict], tools: list[dict] | None = None):
-    """One chat-completion call. Returns the assistant message object
-    (content and, later, tool_calls). Raises AppError on provider failure."""
+@dataclass
+class ChatResult:
+    """The assistant message plus token usage for cost tracking."""
+
+    message: Any
+    usage_in: int = 0
+    usage_out: int = 0
+
+    @property
+    def content(self):
+        return self.message.content
+
+    @property
+    def tool_calls(self):
+        return self.message.tool_calls
+
+
+def chat(messages: list[dict], tools: list[dict] | None = None) -> ChatResult:
+    """One chat-completion call. Raises AppError on provider failure."""
     kwargs: dict = {"model": settings.openai_chat_model, "messages": messages}
     if tools:
         kwargs["tools"] = tools
@@ -45,4 +63,9 @@ def chat(messages: list[dict], tools: list[dict] | None = None):
             "I'm having trouble thinking right now - please try again in a moment.",
             status=503,
         ) from exc
-    return resp.choices[0].message
+    usage = getattr(resp, "usage", None)
+    return ChatResult(
+        message=resp.choices[0].message,
+        usage_in=getattr(usage, "prompt_tokens", 0) or 0,
+        usage_out=getattr(usage, "completion_tokens", 0) or 0,
+    )

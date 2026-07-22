@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sarjy — Pre-read</title>
+<style>
+  @page { size: A4; margin: 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif; color: #1A2421;
+    margin: 0; font-size: 10.5pt; line-height: 1.5;
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  h1 { font-size: 20pt; margin: 0 0 2mm; letter-spacing: -0.02em; }
+  .sub { color: #5A6B66; margin: 0 0 6mm; }
+  h2 {
+    font-size: 12pt; margin: 6mm 0 2mm; color: #0E7C6B;
+    border-bottom: 1.5pt solid #0E7C6B; padding-bottom: 1mm;
+  }
+  p { margin: 0 0 3mm; }
+  ul { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1.2mm; }
+  .url {
+    display: inline-block; background: #E3F1EE; color: #0E7C6B; font-weight: 700;
+    padding: 1.5mm 4mm; border-radius: 2mm; text-decoration: none; margin: 1mm 0 4mm;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 0 0 3mm; }
+  th, td { text-align: left; padding: 1.5mm 3mm; border-bottom: 0.5pt solid #DCE5E2; }
+  th { color: #5A6B66; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat { font-weight: 700; color: #0E7C6B; }
+  .box { border: 1pt solid #DCE5E2; border-left: 3pt solid #0E7C6B; border-radius: 2mm; padding: 3mm 4mm; margin: 0 0 3mm; }
+  .muted { color: #5A6B66; font-size: 9pt; }
+  code { font-family: Consolas, monospace; font-size: 9pt; background: #EEF4F2; padding: 0 1mm; }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <h1>Sarjy 🎙️</h1>
+  <p class="sub">A bilingual voice assistant that remembers you across sessions — and books your dinner, hands-free. Pre-read for the 5-minute presentation.</p>
+  <a class="url" href="https://sarjy-production-3bc0.up.railway.app">sarjy-production-3bc0.up.railway.app</a>
+  <span class="muted">— try it now: tap the orb once and talk (English or عامية مصرية). Append <code>?debug</code> for live latency instrumentation.</span>
+
+  <h2>What it does</h2>
+  <ul>
+    <li><b>Hands-free voice:</b> tap once — voice-activity detection hears when you finish, answers out loud, and keeps listening. Tap while it speaks to interrupt.</li>
+    <li><b>Memory across sessions:</b> tell it your name or favorite color, close the browser, come back tomorrow — it remembers. Every fact is visible and deletable in the Memories drawer.</li>
+    <li><b>Multi-step restaurant booking</b> (the deep dive): collects details across turns, validates them, searches <i>real</i> restaurants (Foursquare + Geoapify geocoding), tolerates interruptions and corrections, requires explicit confirmation, and resumes unfinished bookings in later sessions.</li>
+    <li><b>Bilingual + multimodal:</b> full Arabic support through the entire workflow (بكرة → tomorrow's date, نعم confirms); attach a photo — "book for the number of people in this picture" fills the party size by counting them.</li>
+  </ul>
+
+  <h2>Why Foursquare (the external API)</h2>
+  <p>A booking workflow without real data is a form-filler. Foursquare makes Sarjy a recommender — actual venues at actual malls the user knows. Geoapify supplies geocoding because Foursquare's own geocoder fails on Cairo districts and Arabic names — each API doing what it's best at. A no-hallucination contract is enforced by tests: restaurant names enter the conversation only as validated tool results; failures are reported honestly.</p>
+
+  <h2>The deep dive: the LLM proposes, the FSM disposes</h2>
+  <div class="box">
+    <p>The workflow is a deterministic finite-state machine — <code>COLLECTING → PRESENTING → CONFIRMING → COMPLETED</code> — the LLM only extracts slots and speaks. Four guarantees no prompt can provide:</p>
+    <ul>
+      <li>Per-state <b>tool legality</b> — confirming outside CONFIRMING is structurally impossible</li>
+      <li>Per-field <b>validation</b> — "party of 250 tomorrow at 8" keeps the date, rejects the size with a reason</li>
+      <li>A <b>confirmation double-guard</b> — booking requires the user's literal yes (English or Arabic); neither model hallucination nor prompt injection can book</li>
+      <li><b>Persistence every turn</b> — unfinished bookings resume across sessions</li>
+    </ul>
+    <p class="muted">The entire machine runs its 30+ tests with zero network and zero LLM.</p>
+  </div>
+</div>
+
+<div class="page">
+  <h2>Architecture</h2>
+  <p>Modular monolith: FastAPI, one Docker image on Railway, SQLite behind repositories on a persistent volume. One turn: Whisper STT → gpt-4o-mini with tools → <b>streamed TTS</b> (audio plays before synthesis finishes). Moderation screens every input <i>in parallel</i> with the LLM — safety at zero latency cost, verdict checked before any tool executes. Memory recall is prompt injection, not retrieval: at dozens of facts per user, RAG could only add a miss mode (deliberate, documented). A background extraction sweep makes fact-capture deterministic even when the chat model just answers.</p>
+
+  <div class="grid">
+    <div>
+      <h2>Measured (production)</h2>
+      <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Time-to-first-audio (typical)</td><td class="stat">~3.3–3.9 s</td></tr>
+        <tr><td>… before optimization</td><td>8.7 s</td></tr>
+        <tr><td>Server processing p50</td><td class="stat">~2.3 s</td></tr>
+        <tr><td>LLM cost per turn</td><td class="stat">≈ $0.0004</td></tr>
+        <tr><td>Automated tests (CI)</td><td class="stat">100</td></tr>
+      </table>
+      <p class="muted">Live percentiles: <code>/api/metrics</code>. The p95 tail (~11 s) is tool-heavy turns on slow provider draws — reported honestly, with the fix ladder documented.</p>
+    </div>
+    <div>
+      <h2>Engineering hygiene</h2>
+      <ul>
+        <li>100 tests, zero network, in CI on every push + a smoke gate run against production</li>
+        <li>Rate limiting (proven live at request 21), moderation guardrails, injection tests, sensitive-data guard on memory</li>
+        <li>Request-id-correlated logs, per-turn metrics, token/cost tracking</li>
+        <li>Graceful degradation at every hop — no failure reaches the user as a stack trace</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Trade-offs made deliberately</h2>
+  <ul>
+    <li><b>Request/response over full-duplex streaming</b> — demo reliability over the last 1.5 s; next step is token-streaming into sentence-chunked TTS (~2 s TTFA)</li>
+    <li><b>SQLite over Postgres</b> — single-writer, zero-ops, volume-persisted (survival verified across redeploys); repository seam makes the swap a connection string</li>
+    <li><b>No RAG</b> — full prompt injection = 100% recall at this scale</li>
+    <li><b>Simulated reservation</b> — no open booking API exists here; the FSM's confirmation gate is where a partner API would plug in</li>
+  </ul>
+
+  <h2>Found-in-testing stories (ask me about these)</h2>
+  <ul>
+    <li>Arabic users hit an infinite confirmation loop — the FSM's affirmation guard was doing its job, but only spoke English. One regex later, نعم books dinner.</li>
+    <li>The model silently skipped saving a 4-fact Arabic introduction → the deterministic background extraction sweep was born.</li>
+    <li>Foursquare's geocoder returns an empty boundary for "New Cairo" while two Sizzlers sit 8 km from its center — hence Geoapify coordinates.</li>
+  </ul>
+
+  <p class="muted">Repo: github.com/ashrafkhaledwork-sys/Sarjy · Docs: ARCHITECTURE, DECISIONS (13 ADRs), TESTING, DEPLOYMENT, DEMO, LIMITATIONS</p>
+</div>
+
+</body>
+</html>

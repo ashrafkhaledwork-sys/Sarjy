@@ -51,6 +51,26 @@ class Booking(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class TurnMetric(Base):
+    """One row per successful conversation turn - powers /api/metrics."""
+
+    __tablename__ = "turn_metrics"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(String(16))
+    kind: Mapped[str] = mapped_column(String(8))  # "voice" | "text"
+    stt_ms: Mapped[int] = mapped_column(default=0)
+    llm_ms: Mapped[int] = mapped_column(default=0)
+    tool_ms: Mapped[int] = mapped_column(default=0)
+    total_ms: Mapped[int] = mapped_column(default=0)
+    tokens_in: Mapped[int] = mapped_column(default=0)
+    tokens_out: Mapped[int] = mapped_column(default=0)
+    workflow_status: Mapped[str] = mapped_column(String(16), default="IDLE")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
 class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (Index("ix_messages_session_created", "session_id", "created_at"),)

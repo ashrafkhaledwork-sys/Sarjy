@@ -11,13 +11,12 @@ from slowapi.errors import RateLimitExceeded
 from app.api.routes import router as api_router
 from app.config import APP_VERSION, settings
 from app.core.errors import AppError
+from app.core.logging_setup import configure as configure_logging
+from app.core.logging_setup import request_id_var
 from app.core.ratelimit import limiter
 from app.db.engine import db_ping, init_db
 
-logging.basicConfig(
-    level=settings.log_level.upper(),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging(settings.log_level)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -62,6 +61,15 @@ def _warm_openai_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    try:
+        from app.db.engine import open_session
+        from app.db.repositories import MetricsRepo
+
+        db = open_session()
+        MetricsRepo(db).prune(days=30)
+        db.close()
+    except Exception:  # noqa: BLE001 - retention cleanup must never block startup
+        logging.getLogger(__name__).warning("metrics prune failed", exc_info=True)
     if settings.app_env not in ("test",) and settings.openai_api_key:
         import threading
 
@@ -89,7 +97,11 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
         request.state.request_id = uuid.uuid4().hex[:12]
-        response = await call_next(request)
+        token = request_id_var.set(request.state.request_id)
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_var.reset(token)
         response.headers["X-Request-Id"] = request.state.request_id
         return response
 

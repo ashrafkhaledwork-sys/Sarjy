@@ -38,6 +38,8 @@ class TurnResult:
     tool_ms: int
     memories_updated: bool
     workflow: dict = field(default_factory=dict)
+    tokens_in: int = 0
+    tokens_out: int = 0
 
 
 def run_text_turn(
@@ -87,6 +89,8 @@ def run_text_turn(
     )
     llm_ms = 0
     tool_ms = 0
+    tokens_in = 0
+    tokens_out = 0
 
     assistant = None
     moderation_checked = False
@@ -94,6 +98,8 @@ def run_text_turn(
         t0 = perf_counter()
         assistant = llm.chat(messages, tools=registry.specs())
         llm_ms += int((perf_counter() - t0) * 1000)
+        tokens_in += assistant.usage_in
+        tokens_out += assistant.usage_out
 
         if not moderation_checked:
             # Verdict gates everything downstream: tools and the final reply.
@@ -141,4 +147,6 @@ def run_text_turn(
         tool_ms=tool_ms,
         memories_updated=ctx.memories_updated,
         workflow=fsm.public_state(),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
     )

@@ -42,6 +42,24 @@ def _run_rate_limit_scenario(client):
     assert "request_id" in body_error
 
 
+@respx.mock
+def test_metrics_endpoint_reflects_turns(client):
+    respx.post(OPENAI_CHAT).mock(
+        return_value=httpx.Response(200, json=openai_chat_json("hello"))
+    )
+    for _ in range(2):
+        client.post(
+            "/api/converse",
+            data={"text": "hi", "session_id": str(uuid.uuid4())},
+            headers={"X-User-Id": str(uuid.uuid4())},
+        )
+    m = client.get("/api/metrics").json()
+    assert m["turns"] >= 2
+    assert "p50_ms" in m["server_total"]
+    assert "p95_ms" in m["llm"]
+    assert m["tokens"]["in"] > 0  # usage from the mocked completion payload
+
+
 def test_forget_everything(client):
     from app.db import engine
     from app.db.repositories import MemoryRepo

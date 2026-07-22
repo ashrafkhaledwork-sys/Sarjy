@@ -17,7 +17,7 @@ from app.core.ratelimit import (
     limiter,
 )
 from app.db.engine import get_db
-from app.db.repositories import BookingRepo, ConversationRepo, MemoryRepo
+from app.db.repositories import BookingRepo, ConversationRepo, MemoryRepo, MetricsRepo
 from app.schemas.api import ConverseResponse, Timings, WorkflowInfo
 from app.services import reply_cache, stt, tts
 
@@ -93,6 +93,30 @@ def converse(
     request_id = getattr(request.state, "request_id", uuid.uuid4().hex[:12])
     reply_cache.put(request_id, result.reply_text)
 
+    total_ms = int((perf_counter() - t0) * 1000)
+    MetricsRepo(db).add(
+        request_id=request_id,
+        kind="voice" if audio is not None else "text",
+        stt_ms=stt_ms,
+        llm_ms=result.llm_ms,
+        tool_ms=result.tool_ms,
+        total_ms=total_ms,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        workflow_status=result.workflow.get("status", "IDLE"),
+    )
+    logger.info(
+        "turn kind=%s stt=%dms llm=%dms tools=%dms total=%dms tokens=%d/%d wf=%s",
+        "voice" if audio is not None else "text",
+        stt_ms,
+        result.llm_ms,
+        result.tool_ms,
+        total_ms,
+        result.tokens_in,
+        result.tokens_out,
+        result.workflow.get("status"),
+    )
+
     return ConverseResponse(
         transcript=transcript,
         reply_text=result.reply_text,
@@ -103,10 +127,16 @@ def converse(
             stt_ms=stt_ms,
             llm_ms=result.llm_ms,
             tool_ms=result.tool_ms,
-            total_ms=int((perf_counter() - t0) * 1000),
+            total_ms=total_ms,
         ),
         request_id=request_id,
     )
+
+
+@router.get("/metrics")
+def metrics(db: Session = Depends(get_db)) -> dict:
+    """Latency percentiles, token usage, and cost over the last 500 turns."""
+    return MetricsRepo(db).summary()
 
 
 @router.get("/speech/{request_id}")
